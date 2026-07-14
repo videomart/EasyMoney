@@ -122,23 +122,7 @@ if (googleConfigured) {
   });
 }
 
-router.post('/dev-login', (req, res) => {
-  let user = db.prepare("SELECT * FROM usuarios WHERE email = 'dev@localhost'").get();
-  if (!user) {
-    let cliente = db.prepare("SELECT id FROM clientes WHERE id = 1").get();
-    if (!cliente) {
-      const r = db.prepare("INSERT INTO clientes (nome, dominio) VALUES ('Desenvolvimento', 'localhost')").run();
-      cliente = { id: r.lastInsertRowid };
-      seedCategoriasForClient(cliente.id);
-    }
-    const r = db.prepare("INSERT INTO usuarios (cliente_id, google_id, email, nome, avatar, papel) VALUES (?, 'dev', 'dev@localhost', 'Usuário Dev', '', 'admin')").run(cliente.id);
-    user = { id: r.lastInsertRowid, cliente_id: cliente.id, email: 'dev@localhost', nome: 'Usuário Dev', avatar: '', papel: 'admin' };
-  }
-  req.login({ id: user.id, clienteId: user.cliente_id, nome: user.nome, email: user.email, avatar: user.avatar, papel: user.papel }, (err) => {
-    if (err) return res.status(500).json({ error: 'Erro no login' });
-    res.json({ success: true });
-  });
-});
+
 
 router.get('/me', (req, res) => {
   if (req.isAuthenticated && req.isAuthenticated()) {

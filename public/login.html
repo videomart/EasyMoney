@@ -78,39 +78,7 @@
       font-size: .8rem;
       color: var(--text-secondary);
     }
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 24px 0;
-      color: var(--text-secondary);
-      font-size: .8rem;
-    }
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      border-top: 1px solid var(--border);
-    }
-    .dev-btn {
-      width: 100%;
-      padding: 10px 20px;
-      border: 1px dashed var(--border);
-      border-radius: var(--radius);
-      background: transparent;
-      color: var(--text-secondary);
-      font-size: .85rem;
-      cursor: pointer;
-      transition: all .2s;
-    }
-    .dev-btn:hover {
-      border-color: var(--primary);
-      color: var(--primary);
-      background: #f0f6ff;
-    }
-    .dev-btn:disabled {
-      opacity: .5;
-      cursor: wait;
-    }
+
   </style>
 </head>
 <body>
@@ -133,14 +101,8 @@
         Entrar com Google
       </a>
 
-      <div class="divider">ou</div>
-
-      <button class="dev-btn" id="devLoginBtn" onclick="devLogin()">
-        Entrar em Modo Desenvolvimento
-      </button>
-
       <p class="login-info">
-        Acesse com sua conta Google ou use o modo desenvolvimento para testes.
+        Acesse com sua conta Google para entrar no sistema.
       </p>
     </div>
   </div>
@@ -154,25 +116,7 @@
       el.classList.add('visible');
     }
 
-    async function devLogin() {
-      const btn = document.getElementById('devLoginBtn');
-      btn.disabled = true;
-      btn.textContent = 'Entrando...';
-      try {
-        const res = await fetch('/auth/dev-login', { method: 'POST' });
-        if (res.ok) {
-          window.location.href = '/';
-        } else {
-          alert('Erro ao entrar em modo desenvolvimento.');
-          btn.disabled = false;
-          btn.textContent = 'Entrar em Modo Desenvolvimento';
-        }
-      } catch (e) {
-        alert('Erro de conexão.');
-        btn.disabled = false;
-        btn.textContent = 'Entrar em Modo Desenvolvimento';
-      }
-    }
+
   </script>
 </body>
 </html>
