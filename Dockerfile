@@ -6,11 +6,10 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 COPY . .
+COPY config.example.json ./config.example.json
 
 EXPOSE 3001
 
 VOLUME /app/data
-
-COPY config.example.json ./config.json
 
 CMD ["node", "server.js"]
