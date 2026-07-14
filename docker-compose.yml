@@ -4,7 +4,7 @@ services:
     ports:
       - "3002:3002"
     volumes:
-      - easymoney-data:/app/data
+      - ./data:/app/data
       - ./config.json:/app/config.json
     environment:
       - PORT=3002
@@ -25,9 +25,6 @@ services:
     networks:
       - easymoney_default
       - tvplay-web_default
-
-volumes:
-  easymoney-data:
 
 networks:
   easymoney_default:
