@@ -11,4 +11,6 @@ EXPOSE 3001
 
 VOLUME /app/data
 
+COPY config.example.json ./config.json
+
 CMD ["node", "server.js"]

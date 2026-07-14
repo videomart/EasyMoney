@@ -97,7 +97,7 @@ const PageContasPagar = {
         </div>
       </div>
       <div class="form-group">
-        <label>Categoria</label>
+        <label>Categoria <small style="cursor:pointer;color:var(--primary);text-decoration:underline" onclick="window.open('#/configuracoes','_self');setTimeout(()=>PageAdmin.switchTab('categorias'),100)">(gerenciar)</small></label>
         <select class="form-control" id="f_categoria_id">
           <option value="">Selecione...</option>
           ${cats.filter(cat => cat.tipo === 'despesa' || cat.tipo === 'ambos').map(cat => `<option value="${cat.id}" ${cat.id === c.categoria_id ? 'selected' : ''}>${cat.nome}</option>`).join('')}

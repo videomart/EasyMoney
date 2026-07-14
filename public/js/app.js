@@ -1,36 +1,62 @@
 const API = {
-  async get(url) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`GET ${url} failed`);
+  async request(url, options = {}) {
+    const res = await fetch(url, { ...options, credentials: 'include' });
+    if (res.status === 401) {
+      window.location.href = '/login.html';
+      throw new Error('Não autenticado');
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `${options.method || 'GET'} ${url} failed`);
+    }
     return res.json();
+  },
+  async get(url) {
+    return this.request(url);
   },
   async post(url, data) {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `POST ${url} failed`); }
-    return res.json();
+    return this.request(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   },
   async put(url, data) {
-    const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `PUT ${url} failed`); }
-    return res.json();
+    return this.request(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   },
   async del(url) {
-    const res = await fetch(url, { method: 'DELETE' });
-    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `DELETE ${url} failed`); }
-    return res.json();
+    return this.request(url, { method: 'DELETE' });
   }
 };
 
 const App = {
   currentPage: 'dashboard',
   charts: {},
+  user: null,
 
-  init() {
+  async init() {
+    try {
+      this.user = await API.get('/auth/me');
+      this.renderUserInfo();
+    } catch (e) {
+      return;
+    }
     this.updateDate();
     this.setupNavigation();
     this.setupModal();
     this.route();
     window.addEventListener('hashchange', () => this.route());
+  },
+
+  renderUserInfo() {
+    const avatar = document.getElementById('userAvatar');
+    const name = document.getElementById('userName');
+    const email = document.getElementById('userEmail');
+    if (this.user) {
+      if (this.user.avatar) {
+        avatar.innerHTML = `<img src="${this.user.avatar}" alt="${this.user.nome}">`;
+      } else {
+        avatar.textContent = this.user.nome.charAt(0).toUpperCase();
+      }
+      name.textContent = this.user.nome;
+      email.textContent = this.user.email;
+    }
   },
 
   updateDate() {
@@ -48,8 +74,10 @@ const App = {
     document.querySelectorAll('.nav-item').forEach(el => {
       el.addEventListener('click', () => {
         document.getElementById('sidebar').classList.remove('open');
-        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-        el.classList.add('active');
+        if (!el.classList.contains('logout-btn')) {
+          document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+          el.classList.add('active');
+        }
       });
     });
   },
@@ -111,7 +139,8 @@ const App = {
       'dashboard': 'Dashboard',
       'contas-pagar': 'Contas a Pagar',
       'contas-receber': 'Contas a Receber',
-      'relatorios': 'Relatórios'
+      'relatorios': 'Relatórios',
+      'configuracoes': 'Configurações'
     };
     document.getElementById('pageTitle').textContent = titles[pageName] || 'Dashboard';
 
@@ -123,6 +152,7 @@ const App = {
       case 'contas-pagar': PageContasPagar.render(area); break;
       case 'contas-receber': PageContasReceber.render(area); break;
       case 'relatorios': PageRelatorios.render(area); break;
+      case 'configuracoes': PageAdmin.render(area); break;
       default: window.location.hash = '#/dashboard';
     }
   }
@@ -130,8 +160,7 @@ const App = {
 
 async function getCategorias() {
   try {
-    const res = await fetch('/api/categorias');
-    if (res.ok) return await res.json();
+    return await API.get('/api/categorias');
   } catch (e) {}
   return [
     { id: 1, nome: 'Salário', tipo: 'receita' }, { id: 2, nome: 'Freelance', tipo: 'receita' },

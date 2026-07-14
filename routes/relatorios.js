@@ -6,6 +6,7 @@ const FREQ_LABELS = { diaria: 'Diária', semanal: 'Semanal', quinzenal: 'Quinzen
 
 router.get('/previsao', (req, res) => {
   const { meses = 6 } = req.query;
+  const clienteId = req.user.clienteId;
   const hoje = new Date();
   const previsoes = [];
 
@@ -16,9 +17,9 @@ router.get('/previsao', (req, res) => {
     const mesStr = String(mesNum).padStart(2, '0');
 
     const aPagar = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_pagar
-      WHERE status='pendente' AND strftime('%Y-%m', data_vencimento)=?`).get(`${ano}-${mesStr}`);
+      WHERE status='pendente' AND strftime('%Y-%m', data_vencimento)=? AND cliente_id=?`).get(`${ano}-${mesStr}`, clienteId);
     const aReceber = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_receber
-      WHERE status='pendente' AND strftime('%Y-%m', data_vencimento)=?`).get(`${ano}-${mesStr}`);
+      WHERE status='pendente' AND strftime('%Y-%m', data_vencimento)=? AND cliente_id=?`).get(`${ano}-${mesStr}`, clienteId);
 
     const saldo = aReceber.total - aPagar.total;
     previsoes.push({ mes: mesNum, ano, aPagar: aPagar.total, aReceber: aReceber.total, saldo });
@@ -28,20 +29,21 @@ router.get('/previsao', (req, res) => {
 });
 
 router.get('/resumo-geral', (req, res) => {
+  const clienteId = req.user.clienteId;
   const hoje = new Date().toISOString().split('T')[0];
   const mesAtual = String(new Date().getMonth() + 1).padStart(2, '0');
   const anoAtual = new Date().getFullYear();
 
-  const aPagarPendente = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_pagar WHERE status='pendente'`).get();
-  const aPagarAtrasado = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_pagar WHERE (status='atrasado' OR (status='pendente' AND data_vencimento < ?))`).get(hoje);
-  const aPagarPagoMes = db.prepare(`SELECT COALESCE(SUM(valor_pago),0) as total FROM contas_pagar WHERE status='pago' AND strftime('%m', data_pagamento)=? AND strftime('%Y', data_pagamento)=?`).get(mesAtual, String(anoAtual));
+  const aPagarPendente = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_pagar WHERE status='pendente' AND cliente_id=?`).get(clienteId);
+  const aPagarAtrasado = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_pagar WHERE (status='atrasado' OR (status='pendente' AND data_vencimento < ?)) AND cliente_id=?`).get(hoje, clienteId);
+  const aPagarPagoMes = db.prepare(`SELECT COALESCE(SUM(valor_pago),0) as total FROM contas_pagar WHERE status='pago' AND strftime('%m', data_pagamento)=? AND strftime('%Y', data_pagamento)=? AND cliente_id=?`).get(mesAtual, String(anoAtual), clienteId);
 
-  const aReceberPendente = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_receber WHERE status='pendente'`).get();
-  const aReceberAtrasado = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_receber WHERE (status='atrasado' OR (status='pendente' AND data_vencimento < ?))`).get(hoje);
-  const aReceberRecebidoMes = db.prepare(`SELECT COALESCE(SUM(valor_recebido),0) as total FROM contas_receber WHERE status='recebido' AND strftime('%m', data_recebimento)=? AND strftime('%Y', data_recebimento)=?`).get(mesAtual, String(anoAtual));
+  const aReceberPendente = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_receber WHERE status='pendente' AND cliente_id=?`).get(clienteId);
+  const aReceberAtrasado = db.prepare(`SELECT COALESCE(SUM(valor),0) as total FROM contas_receber WHERE (status='atrasado' OR (status='pendente' AND data_vencimento < ?)) AND cliente_id=?`).get(hoje, clienteId);
+  const aReceberRecebidoMes = db.prepare(`SELECT COALESCE(SUM(valor_recebido),0) as total FROM contas_receber WHERE status='recebido' AND strftime('%m', data_recebimento)=? AND strftime('%Y', data_recebimento)=? AND cliente_id=?`).get(mesAtual, String(anoAtual), clienteId);
 
-  const contasRecorrentes = db.prepare(`SELECT COUNT(*) as c FROM contas_pagar WHERE recorrente=1 AND status='pendente'`).get().c +
-    db.prepare(`SELECT COUNT(*) as c FROM contas_receber WHERE recorrente=1 AND status='pendente'`).get().c;
+  const contasRecorrentes = db.prepare(`SELECT COUNT(*) as c FROM contas_pagar WHERE recorrente=1 AND status='pendente' AND cliente_id=?`).get(clienteId).c +
+    db.prepare(`SELECT COUNT(*) as c FROM contas_receber WHERE recorrente=1 AND status='pendente' AND cliente_id=?`).get(clienteId).c;
 
   res.json({
     aPagarPendente: aPagarPendente.total,
@@ -57,26 +59,28 @@ router.get('/resumo-geral', (req, res) => {
 
 router.get('/proximos-vencimentos', (req, res) => {
   const dias = Number(req.query.dias) || 30;
+  const clienteId = req.user.clienteId;
   const hoje = new Date().toISOString().split('T')[0];
   const futuro = new Date(Date.now() + dias * 86400000).toISOString().split('T')[0];
   const rows = db.prepare(`
     SELECT 'pagar' as tipo, id, descricao, valor, data_vencimento, status, 'Conta a Pagar' as origem FROM contas_pagar
-    WHERE status='pendente' AND data_vencimento BETWEEN ? AND ?
+    WHERE status='pendente' AND data_vencimento BETWEEN ? AND ? AND cliente_id=?
     UNION ALL
     SELECT 'receber' as tipo, id, descricao, valor, data_vencimento, status, 'Conta a Receber' as origem FROM contas_receber
-    WHERE status='pendente' AND data_vencimento BETWEEN ? AND ?
+    WHERE status='pendente' AND data_vencimento BETWEEN ? AND ? AND cliente_id=?
     ORDER BY data_vencimento ASC
-  `).all(hoje, futuro, hoje, futuro);
+  `).all(hoje, futuro, clienteId, hoje, futuro, clienteId);
   res.json(rows);
 });
 
 router.get('/detalhado', (req, res) => {
   const { data_inicio, data_fim, status, tipo } = req.query;
+  const clienteId = req.user.clienteId;
 
-  let conditionsPagar = [];
-  let conditionsReceber = [];
-  let paramsPagar = [];
-  let paramsReceber = [];
+  let conditionsPagar = ['cp.cliente_id = ?'];
+  let conditionsReceber = ['cr.cliente_id = ?'];
+  let paramsPagar = [clienteId];
+  let paramsReceber = [clienteId];
 
   if (data_inicio && data_fim) {
     conditionsPagar.push('cp.data_vencimento BETWEEN ? AND ?');
@@ -96,8 +100,8 @@ router.get('/detalhado', (req, res) => {
     }
   }
 
-  const wherePagar = conditionsPagar.length > 0 ? 'WHERE ' + conditionsPagar.join(' AND ') : '';
-  const whereReceber = conditionsReceber.length > 0 ? 'WHERE ' + conditionsReceber.join(' AND ') : '';
+  const wherePagar = 'WHERE ' + conditionsPagar.join(' AND ');
+  const whereReceber = 'WHERE ' + conditionsReceber.join(' AND ');
 
   let results = [];
 
@@ -143,21 +147,22 @@ router.get('/detalhado', (req, res) => {
 
 router.get('/por-categoria', (req, res) => {
   const { data_inicio, data_fim } = req.query;
+  const clienteId = req.user.clienteId;
   if (data_inicio && data_fim) {
     const pagar = db.prepare(`SELECT c.nome, c.id as categoria_id, COALESCE(SUM(cp.valor),0) as total
       FROM contas_pagar cp LEFT JOIN categorias c ON cp.categoria_id = c.id
-      WHERE cp.status='pendente' AND cp.data_vencimento BETWEEN ? AND ? GROUP BY c.id ORDER BY total DESC`).all(data_inicio, data_fim);
+      WHERE cp.status='pendente' AND cp.data_vencimento BETWEEN ? AND ? AND cp.cliente_id=? GROUP BY c.id ORDER BY total DESC`).all(data_inicio, data_fim, clienteId);
     const receber = db.prepare(`SELECT c.nome, c.id as categoria_id, COALESCE(SUM(cr.valor),0) as total
       FROM contas_receber cr LEFT JOIN categorias c ON cr.categoria_id = c.id
-      WHERE cr.status='pendente' AND cr.data_vencimento BETWEEN ? AND ? GROUP BY c.id ORDER BY total DESC`).all(data_inicio, data_fim);
+      WHERE cr.status='pendente' AND cr.data_vencimento BETWEEN ? AND ? AND cr.cliente_id=? GROUP BY c.id ORDER BY total DESC`).all(data_inicio, data_fim, clienteId);
     return res.json({ pagar, receber });
   }
   const pagar = db.prepare(`SELECT c.nome, c.id as categoria_id, COALESCE(SUM(cp.valor),0) as total
     FROM contas_pagar cp LEFT JOIN categorias c ON cp.categoria_id = c.id
-    WHERE cp.status='pendente' GROUP BY c.id ORDER BY total DESC`).all();
+    WHERE cp.status='pendente' AND cp.cliente_id=? GROUP BY c.id ORDER BY total DESC`).all(clienteId);
   const receber = db.prepare(`SELECT c.nome, c.id as categoria_id, COALESCE(SUM(cr.valor),0) as total
     FROM contas_receber cr LEFT JOIN categorias c ON cr.categoria_id = c.id
-    WHERE cr.status='pendente' GROUP BY c.id ORDER BY total DESC`).all();
+    WHERE cr.status='pendente' AND cr.cliente_id=? GROUP BY c.id ORDER BY total DESC`).all(clienteId);
   res.json({ pagar, receber });
 });
 

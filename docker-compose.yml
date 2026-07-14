@@ -5,6 +5,7 @@ services:
       - "3002:3002"
     volumes:
       - easymoney-data:/app/data
+      - ./config.json:/app/config.json
     environment:
       - PORT=3002
     restart: unless-stopped
